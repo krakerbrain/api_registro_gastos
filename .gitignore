@@ -1,0 +1,26 @@
+# Ignorar el archivo de configuración sensible
+.env
+
+# Ignorar dependencias de Composer
+/vendor/
+
+# Ignorar los archivos de configuración del servidor web
+.htaccess
+
+# Ignorar archivos específicos de sistemas operativos
+.DS_Store
+Thumbs.db
+
+# Ignorar logs y archivos temporales
+*.log
+*.cache
+*.tmp
+
+# Ignorar carpetas de IDE y editores
+.idea/
+.vscode/
+
+# Ignorar archivos creados por Composer al instalar dependencias
+composer.lock
+
+# Ignorar cualquier otro archivo que no quieras rastrear
