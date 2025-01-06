@@ -1,18 +1,19 @@
 <?php
 
 require_once 'config/init.php'; // Cargar configuración e inicialización
+require_once 'config/ConfigUrl.php';
 
 // Puedes cargar dinámicamente las rutas según la URI o el controlador que desees
 $routeDefinition = null;
+$baseUrl = ConfigUrl::get();
 $uri = $_SERVER['REQUEST_URI'];
 
-
 // Define qué archivo de rutas cargar según la URI
-if (strpos($uri, '/api_registro_gastos/login') !== false) {
+if (strpos($uri, $baseUrl . 'login') !== false) {
     $routeDefinition = require 'api/routes/login.php'; // Rutas de autenticación
-} elseif (strpos($uri, '/api_registro_gastos/usuarios') !== false) {
+} elseif (strpos($uri, $baseUrl . 'usuarios') !== false) {
     $routeDefinition = require 'api/routes/usuarios.php'; // Rutas de usuario
-} elseif (strpos($uri, '/api_registro_gastos/categorias') !== false) {
+} elseif (strpos($uri, $baseUrl . 'categorias') !== false) {
     $routeDefinition = require 'api/routes/categorias.php'; // Rutas de usuario
 } else {
     $routeDefinition = require 'api/routes/gastos.php'; // Ruta por defecto para gastos
