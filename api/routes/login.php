@@ -3,5 +3,6 @@
 use FastRoute\RouteCollector;
 
 return function (RouteCollector $r) {
-    $r->addRoute('POST', '/api_registro_gastos/login', 'api\controllers\AuthController@login');
+    $baseUrl = ConfigUrl::get(); // Obtiene el prefijo base dinámico
+    $r->addRoute('POST', $baseUrl . 'login', 'api\controllers\AuthController@login');
 };
