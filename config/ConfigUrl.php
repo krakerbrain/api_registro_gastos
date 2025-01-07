@@ -5,9 +5,9 @@ class ConfigUrl
     public static function get()
     {
         if ($_SERVER['HTTP_HOST'] == 'localhost') {
-            return 'api_registro_gastos/';
+            return '/api_registro_gastos/';
         } else {
-            return 'https://gastosapi.icu/';
+            return '/';
         }
     }
 }
