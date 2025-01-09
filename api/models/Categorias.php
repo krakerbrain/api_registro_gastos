@@ -2,9 +2,11 @@
 
 namespace api\models;
 
+
 class Categorias
 {
     private $db;
+
 
     public function __construct($db)
     {
@@ -74,6 +76,34 @@ class Categorias
         return $this->db->resultSet();
     }
 
+    public function obtenerOInsertarTipoGasto($tipoGasto, $nombreTipoGasto)
+    {
+        // Si tipoGasto no está vacío, se usa directamente
+        if (!empty($tipoGasto)) {
+            // Verificamos si el tipoGasto es válido
+            return $this->findCategoriaById($tipoGasto) ?: null;
+        }
+
+        // Si tipoGasto está vacío, usamos nombreTipoGasto para insertar uno nuevo
+        if (!empty($nombreTipoGasto)) {
+            // Normalizamos el nombre del tipo de gasto
+            $nombreNormalizado = ucwords(strtolower($nombreTipoGasto));
+
+            // Verificamos si ya existe una categoría con este nombre
+            $tipoGastoId = $this->findCategoriaByNombre($nombreNormalizado);
+
+            // Si no existe, lo insertamos
+            if (!$tipoGastoId) {
+                return $this->insertCategoria($nombreNormalizado);
+            }
+
+            return $tipoGastoId; // Si ya existe, retornamos el ID existente
+        }
+
+        return null; // Si ambos están vacíos, retornamos null
+    }
+
+
     public function insertCategoria($nombre)
     {
         // Normalizar la descripción con la primera letra de cada palabra en mayúsculas
@@ -88,5 +118,23 @@ class Categorias
 
         // Retornar el ID del nuevo tipo de gasto insertado
         return $this->db->lastInsertId();
+    }
+
+    //agregar eliminar categoria pero antes hay que verificar que no tenga gastos asociados
+    public function deleteCategoria($id)
+    {
+        // Verificar si la categoría tiene gastos asociados
+
+        $gastos = new Gastos($this->db);
+        $gasto = $gastos->getGastoByTipoGastoId($id);
+        // Si la categoría tiene gastos asociados, no se puede eliminar
+        if ($gasto) {
+            throw new \Exception("No se puede eliminar la categoría porque tiene gastos asociados.");
+        }
+
+        // Eliminar la categoría
+        $this->db->query("DELETE FROM tipo_gastos WHERE id = :id");
+        $this->db->bind(':id', $id);
+        $this->db->execute();
     }
 }

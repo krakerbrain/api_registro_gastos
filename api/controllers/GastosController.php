@@ -5,25 +5,65 @@ namespace api\controllers;
 use api\models\Gastos;
 use api\models\Categorias;
 use api\libs\Database;
+use api\models\Auth; // Importa el modelo de autenticación
 
 class GastosController
 {
     protected $db;
     protected $gastosModel;
     protected $categoriasModel;
+    protected $authModel; // Instanciar el modelo Auth
 
     public function __construct()
     {
         $this->db = new Database(); // Se inicializa la clase Database
         $this->gastosModel = new Gastos($this->db);
         $this->categoriasModel = new Categorias($this->db);
+        $this->authModel = new Auth($this->db); // Instancia del modelo Auth
+    }
+
+    // Método para extraer el token desde la cabecera de la solicitud
+    private function getBearerToken()
+    {
+        $headers = getallheaders();
+        if (isset($headers['Authorization'])) {
+            $matches = [];
+            if (preg_match('/Bearer (.+)/', $headers['Authorization'], $matches)) {
+                return $matches[1];  // Token extraído de la cabecera
+            }
+        }
+        return null;  // Si no se encuentra el token
+    }
+
+    // Verificación del token antes de la acción
+    private function authenticate()
+    {
+        $token = $this->getBearerToken();
+        if (!$token) {
+            http_response_code(401); // No autorizado
+            echo json_encode(['status' => 'error', 'message' => 'Token no proporcionado']);
+            exit;
+        }
+
+        // Verificar el token
+        $user = $this->authModel->validateToken($token);
+        if (!$user) {
+            http_response_code(401); // No autorizado
+            echo json_encode(['status' => 'error', 'message' => 'Token inválido o expirado']);
+            exit;
+        }
+
+        return $user; // Devuelve el usuario si el token es válido
     }
 
     // Listar todos los gastos
     public function index()
     {
         try {
-            $gastos = $this->gastosModel->getAllGastos();
+            // Verificar token
+            $user = $this->authenticate(); // Si el token no es válido, el proceso se detiene aquí
+
+            $gastos = $this->gastosModel->getAllGastos($user['id']);
             header('Content-Type: application/json');
             echo json_encode(['status' => 'success', 'data' => $gastos]);
         } catch (\Exception $e) {
@@ -32,54 +72,28 @@ class GastosController
         }
     }
 
+    // Insertar un nuevo gasto
     public function insert()
     {
         try {
+            // Verificar token
+            $user = $this->authenticate(); // Si el token no es válido, el proceso se detiene aquí
+
             // Obtener los datos del cuerpo de la solicitud
             $data = json_decode(file_get_contents('php://input'), true);
 
             // Validar los datos necesarios
-            if (empty($data['idusuario']) || empty($data['monto'])) {
+            if (empty($data['monto'])) {
                 throw new \Exception("Faltan datos obligatorios.");
-            }
-
-            // Verificar si tipoGasto es vacío
-            $tipoGasto = $data['tipoGasto'] ?? null;
-            $nombreTipoGasto = $data['nombreTipoGasto'] ?? null;
-
-            if (empty($tipoGasto)) {
-                // Si tipoGasto está vacío, verificar el nombre del tipo de gasto
-                if (empty($nombreTipoGasto)) {
-                    throw new \Exception("Debe proporcionar un nombre de tipo de gasto.");
-                }
-
-                // Normalizar el nombre a minúsculas antes de buscar
-                $nombreTipoGasto = strtolower($nombreTipoGasto);
-
-                // Verificar si el tipo de gasto existe por nombre
-                $tipoGastoId = $this->categoriasModel->findCategoriaByNombre($nombreTipoGasto);
-
-                if (!$tipoGastoId) {
-                    // Si no existe, insertar la nueva categoría con el nombre normalizado
-                    $tipoGastoId = $this->categoriasModel->insertCategoria($nombreTipoGasto);
-                }
-            } else {
-                // Si tipoGasto no está vacío, usar el ID proporcionado
-                $tipoGastoId = $tipoGasto;
-
-                // Verificar que el ID del tipo de gasto exista
-                $categoria = $this->categoriasModel->findCategoriaById($tipoGastoId);
-                if (!$categoria) {
-                    throw new \Exception("El tipo de gasto con ID {$tipoGastoId} no existe.");
-                }
             }
 
             // Preparar los datos para insertar el gasto
             $gastoData = [
-                'idusuario' => $data['idusuario'],
+                'idusuario' => $user['id'],  // Usar el ID del usuario autenticado
                 'monto' => $data['monto'],
-                'tipoGasto' => $tipoGastoId, // Usar el ID del tipo de gasto
-                'detallesId' => $data['detallesId'] ?? []
+                'tipoGasto' => $data['tipoGasto'] ?? null,
+                'detallesId' => $data['detallesId'] ?? [],  // Agregar detallesId al array
+                'nombreTipoGasto' => $data['nombreTipoGasto'] ?? null,
             ];
 
             // Insertar el gasto y obtener la respuesta
@@ -89,24 +103,24 @@ class GastosController
             header('Content-Type: application/json');
             echo json_encode(['status' => 'success', 'data' => $gasto]);
         } catch (\Exception $e) {
-            // Manejar errores
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
 
-
-
-
+    // Actualizar un gasto
     public function update()
     {
         try {
+            // Verificar token
+            $user = $this->authenticate(); // Si el token no es válido, el proceso se detiene aquí
+
             // Obtener los datos del cuerpo de la solicitud
             $data = json_decode(file_get_contents('php://input'), true);
 
             // Validar los datos necesarios
-            if (empty($data['id']) || !isset($data['monto_gasto']) || !isset($data['descripciones'])) {
-                throw new Exception("Faltan datos obligatorios.");
+            if (empty($data['id']) || !isset($data['monto_gasto'])) {
+                throw new \Exception("Faltan datos obligatorios.");
             }
 
             // Actualizar el gasto y obtener la respuesta
@@ -116,15 +130,17 @@ class GastosController
             header('Content-Type: application/json');
             echo json_encode(['status' => 'success', 'data' => $response]);
         } catch (\Exception $e) {
-            // Manejar errores
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
 
+    // Eliminar un gasto
     public function delete($id)
     {
         try {
+            // Verificar token
+            $user = $this->authenticate(); // Si el token no es válido, el proceso se detiene aquí
 
             $gastoId = $id['id'] ?? null;
             if (!$gastoId) {
@@ -132,21 +148,13 @@ class GastosController
                 echo json_encode(['status' => 'error', 'message' => 'ID del gasto es requerido.']);
                 return;
             }
-            // Validar que el ID no esté vacío y sea numérico
-            if (!is_numeric($gastoId) || $gastoId <= 0) {
-                http_response_code(400);
-                echo json_encode(['status' => 'error', 'message' => 'ID inválido. Debe ser un número positivo.']);
-                return;
-            }
 
-            // Llamar al método del modelo para eliminar el gasto
+            // Eliminar el gasto y responder
             $response = $this->gastosModel->deleteGasto($gastoId);
 
-            // Responder con éxito
             header('Content-Type: application/json');
             echo json_encode(['status' => 'success', 'data' => $response]);
         } catch (\Exception $e) {
-            // Manejar errores
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }

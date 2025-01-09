@@ -13,7 +13,7 @@ class CategoriasController
     public function __construct()
     {
         $this->db = new Database(); // Se inicializa la clase Database
-        $this->categoriasModel = new Categorias($this->db);
+        $this->categoriasModel = new Categorias($this->db, null);
     }
 
     // Listar todas las categorias
@@ -62,6 +62,23 @@ class CategoriasController
         }
     }
 
-    //Insertar una categoria
+    //Delete categoria
+    public function delete($vars)
+    {
+        try {
+            $id = $vars['id'] ?? null;
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'ID de la categoria es requerido.']);
+                return;
+            }
 
+            $result = $this->categoriasModel->deleteCategoria($id);
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'success', 'message' => "Categoria eliminada exitosamente"]);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+    }
 }

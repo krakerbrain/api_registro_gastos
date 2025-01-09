@@ -6,7 +6,8 @@ class Gastos
 {
     private $db;
 
-    public function __construct($db)
+
+    public function __construct($db) // Se inyecta la dependencia de Categorias
     {
         $this->db = $db;
     }
@@ -33,21 +34,37 @@ class Gastos
         return $this->db->resultSet();
     }
 
-    // Insertar un gasto, 
+    // Obtener un gasto por gastoID
+    public function getGastoByTipoGastoId($id)
+    {
+        $this->db->query("SELECT id FROM gastos WHERE tipo_gasto_id = :id LIMIT 1");
+        $this->db->bind(':id', $id);
+        return $this->db->singleValue();
+    }
+
     public function insertGasto($data)
     {
         $fecha = date('Y-m-d H:i:s'); // Obtener la fecha actual
+        $categorias = new Categorias($this->db); // Crear una instancia de Categorias
+
         $this->db->beginTransaction(); // Iniciar transacción
 
         try {
-            // Insertar el gasto principal
+            // Llamamos al nuevo método para obtener o insertar el tipo de gasto
+            $tipoGastoId = $categorias->obtenerOInsertarTipoGasto($data['tipoGasto'], $data['nombreTipoGasto']);
+
+            if (!$tipoGastoId) {
+                throw new \Exception("Debe proporcionar un tipo de gasto válido.");
+            }
+
+            // Insertar el gasto principal con el ID del tipo de gasto (nuevo o existente)
             $this->db->query("
             INSERT INTO gastos (idusuario, monto_gasto, tipo_gasto_id, created_at, updated_at)
-            VALUES (:idusuario, :monto, :tipoGasto, :fecha, :fecha)
+            VALUES (:idusuario, :monto, :tipoGastoId, :fecha, :fecha)
         ");
             $this->db->bind(':idusuario', $data['idusuario']);
             $this->db->bind(':monto', $data['monto']);
-            $this->db->bind(':tipoGasto', $data['tipoGasto']);
+            $this->db->bind(':tipoGastoId', $tipoGastoId);  // Usar el ID del tipo de gasto
             $this->db->bind(':fecha', $fecha);
             $this->db->execute();
 
@@ -80,6 +97,8 @@ class Gastos
             throw new \Exception("Error al insertar el gasto: " . $e->getMessage());
         }
     }
+
+
 
     public function updateGasto($data)
     {
@@ -127,7 +146,7 @@ class Gastos
             ];
         } catch (\Exception $e) {
             $this->db->cancelTransaction(); // Revertir la transacción en caso de error
-            throw new Exception("Error al actualizar el gasto: " . $e->getMessage());
+            throw new \Exception("Error al actualizar el gasto: " . $e->getMessage());
         }
     }
 
@@ -151,7 +170,7 @@ class Gastos
         } catch (\Exception $e) {
             // Revertir la transacción en caso de error
             $this->db->cancelTransaction();
-            throw new Exception("Error al eliminar el gasto: " . $e->getMessage());
+            throw new \Exception("Error al eliminar el gasto: " . $e->getMessage());
         }
     }
 }
