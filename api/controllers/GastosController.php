@@ -3,71 +3,66 @@
 namespace api\controllers;
 
 use api\models\Gastos;
+use api\models\User;
 use api\models\Categorias;
 use api\libs\Database;
-use api\models\Auth; // Importa el modelo de autenticación
+use api\middlewares\AuthService;
 
 class GastosController
 {
     protected $db;
     protected $gastosModel;
+    protected $userModel;
     protected $categoriasModel;
-    protected $authModel; // Instanciar el modelo Auth
+    private $authService;
 
     public function __construct()
     {
         $this->db = new Database(); // Se inicializa la clase Database
         $this->gastosModel = new Gastos($this->db);
+        $this->userModel = new User($this->db);
         $this->categoriasModel = new Categorias($this->db);
-        $this->authModel = new Auth($this->db); // Instancia del modelo Auth
-    }
-
-    // Método para extraer el token desde la cabecera de la solicitud
-    private function getBearerToken()
-    {
-        $headers = getallheaders();
-        if (isset($headers['Authorization'])) {
-            $matches = [];
-            if (preg_match('/Bearer (.+)/', $headers['Authorization'], $matches)) {
-                return $matches[1];  // Token extraído de la cabecera
-            }
-        }
-        return null;  // Si no se encuentra el token
-    }
-
-    // Verificación del token antes de la acción
-    private function authenticate()
-    {
-        $token = $this->getBearerToken();
-        if (!$token) {
-            http_response_code(401); // No autorizado
-            echo json_encode(['status' => 'error', 'message' => 'Token no proporcionado']);
-            exit;
-        }
-
-        // Verificar el token
-        $user = $this->authModel->validateToken($token);
-        if (!$user) {
-            http_response_code(401); // No autorizado
-            echo json_encode(['status' => 'error', 'message' => 'Token inválido o expirado']);
-            exit;
-        }
-
-        return $user; // Devuelve el usuario si el token es válido
+        $this->authService = new AuthService($this->db);
     }
 
     // Listar todos los gastos
-    public function index()
+    public function getGastos($vars = null)
     {
         try {
-            // Verificar token
-            $user = $this->authenticate(); // Si el token no es válido, el proceso se detiene aquí
+            // Autenticar usuario
+            $user = $this->authService->authenticate();
+            $userId = $vars['idUsuario'] ?? null;
 
-            $gastos = $this->gastosModel->getAllGastos($user['id']);
+            // Filtrar según el rol del usuario
+            if ($user['role_id'] === 1) {
+                // Rol 1: Admin
+                if ($vars) {
+                    // Validar que el usuario existe antes de consultar
+                    if (!$this->userModel->userExists($userId)) {
+                        throw new \Exception('Usuario no encontrado', 404);
+                    }
+                    $gastos = $this->gastosModel->getGastosByUser($userId);
+                } else {
+                    $gastos = $this->gastosModel->getAllGastos();
+                }
+            } elseif ($user['role_id'] === 2) {
+                // Rol 2: Gestor, puede ver los gastos propios y los que administra
+                $gastos = $this->gastosModel->getGastosByAdminOrUser($user['id']);
+            } elseif ($user['role_id'] === 3) {
+                // Rol 3: Usuario, solo puede ver sus propios gastos
+                if ($userId && $userId != $user['id']) {
+                    throw new \Exception('Acceso denegado', 403);
+                }
+                $gastos = $this->gastosModel->getGastosByUser($user['id']);
+            } else {
+                throw new \Exception('Rol no permitido', 403);
+            }
+
+            // Responder con los datos
             header('Content-Type: application/json');
             echo json_encode(['status' => 'success', 'data' => $gastos]);
         } catch (\Exception $e) {
-            http_response_code(500);
+            http_response_code($e->getCode() ?: 500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }

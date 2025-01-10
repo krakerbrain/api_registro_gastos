@@ -12,9 +12,9 @@ class Gastos
         $this->db = $db;
     }
 
-    // Obtener todos los gastos
     public function getAllGastos()
     {
+        // Devuelve todos los gastos
         $this->db->query("
             SELECT 
                 g.id,
@@ -31,6 +31,57 @@ class Gastos
             LEFT JOIN descripcion_gastos dg ON dgg.descripcion_gasto_id = dg.id
             GROUP BY g.id
         ");
+        return $this->db->resultSet();
+    }
+
+    public function getGastosByAdminOrUser($userId)
+    {
+        // Devuelve los gastos del usuario o los que administra
+        $this->db->query("
+            SELECT 
+                g.id,
+                g.idusuario,
+                g.monto_gasto,
+                g.tipo_gasto_id,
+                t.descripcion AS tipo_gasto,
+                GROUP_CONCAT(dg.descripcion SEPARATOR ', ') AS descripciones,
+                g.created_at,
+                g.updated_at
+            FROM gastos g
+            LEFT JOIN users u ON g.idusuario = u.id
+            LEFT JOIN tipo_gastos t ON g.tipo_gasto_id = t.id
+            LEFT JOIN descripcion_gasto_gasto dgg ON g.id = dgg.gasto_id
+            LEFT JOIN descripcion_gastos dg ON dgg.descripcion_gasto_id = dg.id
+            WHERE g.idusuario = :userId
+            OR u.admin_id = :userId
+            GROUP BY g.id
+        ");
+        $this->db->bind(':userId', $userId);
+        return $this->db->resultSet();
+    }
+
+    public function getGastosByUser($userId)
+    {
+        // Devuelve solo los gastos del usuario
+        $this->db->query("
+        SELECT 
+            g.id,
+            g.idusuario,
+            g.monto_gasto,
+            g.tipo_gasto_id,
+            t.descripcion AS tipo_gasto,
+            GROUP_CONCAT(dg.descripcion SEPARATOR ', ') AS descripciones,
+            g.created_at,
+            g.updated_at
+        FROM gastos g
+        LEFT JOIN users u ON g.idusuario = u.id
+        LEFT JOIN tipo_gastos t ON g.tipo_gasto_id = t.id
+        LEFT JOIN descripcion_gasto_gasto dgg ON g.id = dgg.gasto_id
+        LEFT JOIN descripcion_gastos dg ON dgg.descripcion_gasto_id = dg.id
+        WHERE g.idusuario = :userId
+        GROUP BY g.id
+    ");
+        $this->db->bind(':userId', $userId);
         return $this->db->resultSet();
     }
 

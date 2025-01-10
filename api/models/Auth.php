@@ -47,7 +47,7 @@ class Auth
 
     public function validateToken($token)
     {
-        $sql = "SELECT * FROM users WHERE remember_token = :token AND token_expiry > NOW()";
+        $sql = "SELECT id,role_id FROM users WHERE remember_token = :token AND token_expiry > NOW()";
         $this->db->query($sql);
         $this->db->bind(':token', $token);
         return $this->db->single();
