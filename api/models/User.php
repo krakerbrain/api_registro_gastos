@@ -53,7 +53,7 @@ class User
     }
 
     // Método para crear un usuario
-    public function create($data)
+    public function create($data, $adminId = null)
     {
 
         // Verificar si el usuario ya existe
@@ -61,7 +61,7 @@ class User
         if ($user) {
             throw new \Exception('El correo electrónico ya está registrado');
         }
-        $adminId = isset($data['admin_id']) ? $data['admin_id'] : null;
+
         // Preparar la consulta SQL
         $this->db->query("INSERT INTO users (name, email, password, role_id, admin_id, created_at) 
               VALUES (:name, :email, :password, :role_id, :admin_id, NOW())");

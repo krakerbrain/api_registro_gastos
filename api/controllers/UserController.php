@@ -5,6 +5,7 @@ namespace api\controllers;
 use api\models\User;
 use api\libs\Database;
 use api\middlewares\AuthService;
+use api\middlewares\RoleValidator;
 
 class UserController
 {
@@ -74,34 +75,11 @@ class UserController
             // Autenticar al usuario actual para obtener su rol
             $currentUser = $this->authService->authenticate(); // Ejemplo: devuelve ['id' => 1, 'role_id' => 2]
 
-            // Verificar permisos según el rol del usuario actual
-            switch ($currentUser['role_id']) {
-                case 1: // Superadministrador
-                    // Puede registrar roles 2 (Administrador) o 3 (Usuario estándar)
-                    if (!in_array($input['role_id'], [2, 3])) {
-                        throw new \Exception('Permiso denegado para asignar este rol');
-                    }
-                    break;
-
-                case 2: // Administrador
-                    // Solo puede registrar usuarios estándar (Rol 3)
-                    if ($input['role_id'] !== 3) {
-                        throw new \Exception('Permiso denegado para asignar este rol');
-                    }
-                    // Asociar admin_id al usuario registrado
-                    $input['admin_id'] = $currentUser['id'];
-                    break;
-
-                case 3: // Usuario estándar
-                    // No tiene permisos para registrar usuarios
-                    throw new \Exception('Permiso denegado para registrar usuarios');
-
-                default:
-                    throw new \Exception('Rol no válido');
-            }
+            // Validar el rol utilizando RoleValidator
+            RoleValidator::validate($currentUser['role_id'], $input['role_id']);
 
             // Crear un nuevo usuario en la base de datos
-            $this->userModel->create($input);
+            $this->userModel->create($input, $currentUser['id']);
 
             // Responder con éxito
             header('Content-Type: application/json');
@@ -136,39 +114,8 @@ class UserController
                 return;
             }
 
-            // Verificar permisos según el rol del usuario actual
-            switch ($currentUser['role_id']) {
-                case 1: // Superadministrador
-                    // Puede modificar a cualquier usuario, no necesita restricciones adicionales
-                    break;
-
-                case 2: // Administrador
-                    // Solo puede modificar su propio perfil o los usuarios Rol 3 que ha registrado
-                    if ($currentUser['id'] !== $targetUser['id'] && $targetUser['role_id'] !== 3) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para modificar este usuario']);
-                        return;
-                    }
-
-                    // Verificar que el usuario con Rol 3 pertenece a este administrador
-                    if ($targetUser['role_id'] === 3 && $targetUser['admin_id'] !== $currentUser['id']) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para modificar este usuario']);
-                        return;
-                    }
-                    break;
-
-                case 3: // Usuario estándar
-                    // No puede modificar a ningún usuario, incluido a sí mismo
-                    http_response_code(403); // Forbidden
-                    echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para modificar usuarios']);
-                    return;
-
-                default:
-                    http_response_code(400); // Bad Request
-                    echo json_encode(['status' => 'error', 'message' => 'Rol no válido']);
-                    return;
-            }
+            // Validar permisos utilizando RoleValidator
+            RoleValidator::validateUpdatePermission($currentUser, $targetUser, false);
 
             // Realizar la actualización
             $updated = $this->userModel->update($id, $input['name'], $input['email']);
@@ -212,40 +159,8 @@ class UserController
             // Obtener información del usuario a modificar
             $targetUser = $this->userModel->getUserById($userId);
 
-            // Verificar permisos según el rol del usuario actual
-            switch ($currentUser['role_id']) {
-                case 1:
-                    // Rol 1 puede actualizar la contraseña de cualquier usuario
-                    break;
-                case 2:
-                    // Rol 2 puede actualizar su propia contraseña y la de los usuarios con rol 3 bajo su administración
-                    if ($currentUser['id'] !== $targetUser['id'] && $targetUser['role_id'] !== 3) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para cambiar la contraseña de este usuario']);
-                        return;
-                    }
-
-                    // Verificar que el usuario con Rol 3 pertenece a este administrador
-                    if ($targetUser['role_id'] === 3 && $targetUser['admin_id'] !== $currentUser['id']) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para modificar la contraseña de este usuario']);
-                        return;
-                    }
-
-                    break;
-                case 3:
-                    // Rol 3 solo puede actualizar su propia contraseña
-                    if ($userId != $currentUser['id']) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para cambiar tu contraseña']);
-                        return;
-                    }
-                    break;
-                default:
-                    http_response_code(403); // Forbidden
-                    echo json_encode(['status' => 'error', 'message' => 'Rol desconocido']);
-                    return;
-            }
+            // Validar permisos utilizando RoleValidator
+            RoleValidator::validateUpdatePermission($currentUser, $targetUser, true);
 
             // Usamos el método del modelo para verificar la contraseña actual **después** de haber comprobado los permisos
             $isPasswordValid = $this->userModel->verifyPassword($userId, $input['current_password']);
@@ -266,10 +181,6 @@ class UserController
         }
     }
 
-
-
-
-
     // Método para eliminar un usuario
     public function delete($id)
     {
@@ -288,28 +199,7 @@ class UserController
             $targetUser = $this->userModel->getUserById($userId);
 
             // Verificar permisos según el rol del usuario actual
-            switch ($currentUser['role_id']) {
-                case 1:
-                    // Rol 1 puede eliminar cualquier usuario
-                    break;
-                case 2:
-                    // Rol 2 solo puede eliminar usuarios con rol 3
-                    if ($targetUser['role_id'] !== 3) {
-                        http_response_code(403); // Forbidden
-                        echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para eliminar este usuario']);
-                        return;
-                    }
-                    break;
-                case 3:
-                    // Rol 3 no puede eliminar a ningún usuario
-                    http_response_code(403); // Forbidden
-                    echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para eliminar usuarios']);
-                    return;
-                default:
-                    http_response_code(403); // Forbidden
-                    echo json_encode(['status' => 'error', 'message' => 'Rol desconocido']);
-                    return;
-            }
+            RoleValidator::validateDeletePermission($currentUser, $targetUser);
 
             // Llamamos al método de eliminación en el modelo
             $deleted = $this->userModel->delete($userId);
